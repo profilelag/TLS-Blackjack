@@ -25,7 +25,7 @@ const cards = [[1, "A"], [2, "2"], [3, "3"], [4, "4"], [5, "5"], [6, "6"], [7, "
 const server = createServer((socket: Socket) => {
     console.log("Client connected");
     var info = {
-        token: "e13162be401bd8",
+        token: "",
         game: {
             dealer: [cards[0], cards[0]],
             player: [cards[0], cards[0]],
