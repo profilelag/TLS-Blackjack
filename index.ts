@@ -1,6 +1,5 @@
 import { Database } from "bun:sqlite";
 import { createServer, Socket } from "node:net";
-import { buffer } from "stream/consumers";
 
 const sumOfCards = (cards: Array<Array<any>>) => {
     let sum = 0;
@@ -26,8 +25,7 @@ const cards = [[1, "A"], [2, "2"], [3, "3"], [4, "4"], [5, "5"], [6, "6"], [7, "
 const server = createServer((socket: Socket) => {
     console.log("Client connected");
     var info = {
-        buffer: "",
-        token: "",
+        token: "e13162be401bd8",
         game: {
             dealer: [cards[0], cards[0]],
             player: [cards[0], cards[0]],
@@ -48,7 +46,7 @@ const server = createServer((socket: Socket) => {
                 if(sumOfCards(info.game.player) > 21) {
                     socket.write("Bust! You lost $" + info.game.bet + ".\r\n");
                     //@ts-ignore
-                    db.query("UPDATE players SET balance = balance - ? WHERE token = ?", info.game.bet, info.token);
+                    db.query(`UPDATE players SET balance = balance - ${info.game.bet} WHERE token = '${info.token}'`);
                     info.game = {
                         dealer: [cards[0], cards[0]],
                         player: [cards[0], cards[0]],
@@ -66,11 +64,11 @@ const server = createServer((socket: Socket) => {
                 if(sumOfCards(info.game.dealer) > 21 || sumOfCards(info.game.player) > sumOfCards(info.game.dealer)) {
                     socket.write("You won $" + info.game.bet + ".\r\n");
                     //@ts-ignore
-                    db.query("UPDATE players SET balance = balance + ? WHERE token = ?", info.game.bet, info.token);
+                    db.query(`UPDATE players SET balance = ${db.query(`SELECT balance FROM players WHERE token = '${info.token}'`).get().balance+info.game.bet} WHERE token = '${info.token}'`).run();
                 } else if(sumOfCards(info.game.player) < sumOfCards(info.game.dealer)) {
                     socket.write("You lost $" + info.game.bet + ".\r\n");
                     //@ts-ignore
-                    db.query("UPDATE players SET balance = balance - ? WHERE token = ?", info.game.bet, info.token);
+                    db.query(`UPDATE players SET balance = ${db.query(`SELECT balance FROM players WHERE token = '${info.token}'`).get().balance-info.game.bet} WHERE token = '${info.token}'`).run();
                 } else {
                     socket.write("It's a tie.\r\n");
                 }
@@ -80,6 +78,9 @@ const server = createServer((socket: Socket) => {
                     bet: 0
                 }
             }
+        }
+        else if(data == "/token") {
+            socket.write("Your token is " + info.token + ".\r\n");
         }
         else if(data == "/?") {
             socket.write("Commands:\r\n");
@@ -129,13 +130,14 @@ const server = createServer((socket: Socket) => {
                 socket.write("Logged out successfully.\r\n");
             }
         }
-        else if(data == "/balance") {
+        else if(data == "/balance" || data == "/bal") {
             if(info.token == "") {
                 socket.write("You are not logged in.\r\n");
             } else {
                 //@ts-ignore
-                const user = db.query("SELECT * FROM players WHERE token = ?", info.token);
-                socket.write("Your balance is $" + user[0].balance + ".\r\n");
+                const user = db.query(`SELECT balance FROM players WHERE token = '${info.token}'`).get().balance;
+                //@ts-ignore
+                socket.write("Your balance is $" + user + ".\r\n");
             }
         }
         else if(data.startsWith("/newgame")) {
@@ -144,6 +146,10 @@ const server = createServer((socket: Socket) => {
             } else {
                 if(data.split(" ").length < 2 || isNaN(parseInt(data.split(" ")[1])) || parseInt(data.split(" ")[1]) <= 0) {
                     socket.write("Please specify a bet.\r\n");
+                }
+                //@ts-ignore
+                else if(parseInt(data.split(" ")[1]) > db.query(`SELECT balance FROM players WHERE token = '${info.token}'`).get().balance) {
+                    socket.write("You don't have enough money.\r\n");
                 } else {
                     info.game = {
                         dealer: [cards[Math.floor(Math.random() * cards.length)], cards[Math.floor(Math.random() * cards.length)]],
@@ -156,7 +162,7 @@ const server = createServer((socket: Socket) => {
                     if(sumOfCards(info.game.player) == 21) {
                         socket.write("Blackjack! You won $" + info.game.bet * 1.5 + ".\r\n");
                         //@ts-ignore
-                        db.query("UPDATE players SET balance = balance + ? WHERE token = ?", info.game.bet * 1.5, info.token);
+                        db.query(`UPDATE players SET balance = ${db.query(`SELECT balance FROM players WHERE token = '${info.token}'`).get().balance + info.game.bet * 1.5} WHERE token = '${info.token}'`).run();
                         info.game = {
                             dealer: [cards[0], cards[0]],
                             player: [cards[0], cards[0]],
@@ -171,7 +177,6 @@ const server = createServer((socket: Socket) => {
         else {
             socket.write("Unknown command. Type /? for help.\r\n");
         }
-        info.buffer = ""
     });
     socket.on("end", () => {
         console.log("Client disconnected");
